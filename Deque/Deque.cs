@@ -1,8 +1,4 @@
-﻿using System;
-using System.Text;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
+﻿using System.Text;
 
 namespace System.Collections.Generic
 {
@@ -56,11 +52,19 @@ namespace System.Collections.Generic
         #endregion
 
         #region constructor
+        /// <summary>
+        /// 初始化Deque类的新实例，该实例为空并且具有默认初始容量
+        /// </summary>
         public Deque()
         {
             array = emptyArray;
         }
 
+        /// <summary>
+        ///  初始化Deque类的新实例，该实例为空并且具有指定的初始容量
+        /// </summary>
+        /// <param name="capacity">Deque可包含的初始元素数</param>
+        /// <exception cref="ArgumentOutOfRangeException"> capacity小于0</exception>
         public Deque(int capacity)
         {
             if (capacity < 0)
@@ -71,6 +75,12 @@ namespace System.Collections.Generic
             size = 0;
         }
 
+        /// <summary>
+        ///  初始化Deque类的新实例，该实例包含从指定集合复制的元素并且具有足够的容量来容纳所复制的元素。
+        /// </summary>
+        /// <param name="collection">其元素被复制到Deque中</param>
+        /// <param name="enTail">是否从尾部添加，默认为true</param>
+        /// <exception cref="ArgumentNullException">collection为null</exception>
         public Deque(IEnumerable<T> collection,bool enTail = true)
         {
             if (collection == null)
@@ -102,6 +112,10 @@ namespace System.Collections.Generic
         #endregion
 
         #region property
+        /// <summary>
+        /// 获取Deque中包含的元素数。
+        /// </summary>
+        /// <returns>Deque中包含的元素数</returns>
         public int Count
         {
             get
@@ -109,7 +123,7 @@ namespace System.Collections.Generic
                 return size;
             }
         }
-
+        
         object ICollection.SyncRoot
         {
             get
@@ -131,25 +145,74 @@ namespace System.Collections.Generic
         }
         #endregion
 
-        #region interfaceTODO
+        #region interface
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
-            throw new NotImplementedException();
+            return new Enumerator(this);
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            throw new NotImplementedException();
+            return new Enumerator(this);
         }
 
         void ICollection.CopyTo(Array array, int index)
         {
-            throw new NotImplementedException();
+            if (array == null)
+            {
+                throw new ArgumentNullException("array");
+            }
+
+            if (array.Rank != 1)
+            {
+                throw new ArgumentException("array is not an array with rank 1");
+            }
+
+            if (array.GetLowerBound(0) != 0)
+            {
+                throw new ArgumentException("array must have lower bound zero");
+            }
+
+            if (index < 0 || index > array.Length)
+            {
+                throw new ArgumentOutOfRangeException("index");
+            }
+
+            int arrLen = array.Length;
+
+            if (arrLen - index < size)
+            {
+                throw new ArgumentException("no enough space to store items");
+            }
+
+            int numToCopy = (arrLen - index < size) ? arrLen - index : size;
+
+            if (numToCopy == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                int firstPart = (this.array.Length - head < numToCopy) ? this.array.Length - head : numToCopy;
+                Array.Copy(this.array, head, array, index, firstPart);
+                numToCopy -= firstPart;
+                if (numToCopy > 0)
+                {
+                    Array.Copy(this.array, 0, array, index + this.array.Length - head, numToCopy);
+                    Array.Copy(this.array, 0, array, index + this.array.Length - head, numToCopy);
+                }
+            }
+
+            catch (ArrayTypeMismatchException)
+            {
+                throw new ArgumentException("targetArray is not the right type");
+            }
         }
 
         #endregion
 
-        #region publicMethodTODO
+        #region publicMethod
         public void EnTail(T item)
         {
             if(size == array.Length)
@@ -220,6 +283,10 @@ namespace System.Collections.Generic
                 Array.Clear(array, head, array.Length - head);
                 Array.Clear(array, 0, tail);
             }
+            head = 0;
+            tail = 0;
+            size = 0;
+            version++;
         }
 
         public bool Contains(T item)
@@ -323,30 +390,154 @@ namespace System.Collections.Generic
             }
         }
 
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+            for(int i = 0; i < array.Length; i++)
+            {
+                if(i == head)
+                {
+                    sb.AppendLine(array[i].ToString() + "  (head)");
+                }
+                else if (i == (tail - 1 + array.Length) % array.Length)
+                {
+                    sb.AppendLine(array[i].ToString() + "  (tail)");
+                }
+                else
+                {
+                    sb.AppendLine(array[i].ToString());
+                }
+            }
+            return sb.ToString();
+        }
         #endregion
 
-        #region privateMethodTODO
+        #region privateMethod
         private void SetCapacity(int capacity)
         {
             T[] newArray = new T[capacity];
-            if(head<tail)
+            if (size > 0)
             {
-                Array.Copy(array, head, newArray, 0, size);
-            }
-            else
-            {
-                Array.Copy(array, head, newArray, 0, array.Length - head);
-                Array.Copy(array, 0, newArray, array.Length - head, tail);
+                if (head < tail)
+                {
+                    Array.Copy(array, head, newArray, 0, size);
+                }
+                else
+                {
+                    Array.Copy(array, head, newArray, 0, array.Length - head);
+                    Array.Copy(array, 0, newArray, array.Length - head, tail);
+                }
             }
             array = newArray;
             head = 0;
             tail = size;
             version++;
         }
+
+        internal T GetElement(int i)
+        {
+            return array[(head + i) % array.Length];
+        }
         #endregion
 
-        #region structTODO
-        #endregion
+        #region struct
+        public struct Enumerator : IEnumerator<T>, IEnumerator
+        {
+            #region valid
+            private Deque<T> deque;
+            private int index;   //-1 not start   -2 ended/disposed
+            private int version;
+            private T currentElement;
+            #endregion
+            
+            #region constructor
+            public Enumerator(Deque<T> q)
+            {
+                deque = q;
+                index = -1;
+                version = deque.version;
+                currentElement = default;
+            }
+            #endregion
 
+
+            #region interface
+            public T Current
+            {
+                get
+                {
+                    if(index < 0)
+                    {
+                        if(index == -1)
+                        {
+                            throw new InvalidOperationException("Enum not start");
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException("Enum ended");
+                        }
+                    }
+                    return currentElement;
+                }
+            }     
+
+            object IEnumerator.Current
+            {
+                get
+                {
+                    if (index < 0)
+                    {
+                        if (index == -1)
+                        {
+                            throw new InvalidOperationException("Enum not start");
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException("Enum ended");
+                        }
+                    }
+                    return currentElement;
+                }
+            }
+
+            public void Dispose()
+            {
+                index = -2;
+                currentElement = default;
+            }
+
+            public bool MoveNext()
+            {
+                if(version != deque.version)
+                {
+                    throw new InvalidOperationException("deque fail version");
+                }
+                if(index == -2)
+                {
+                    return false;
+                }
+                index++;
+                if(index == deque.size)
+                {
+                    index = -2;
+                    currentElement = default;
+                    return false;
+                }
+                currentElement = deque.GetElement(index);
+                return true;
+            }
+
+            public void Reset()
+            {
+                if (version != deque.version)
+                {
+                    throw new InvalidOperationException("deque fail version");
+                }
+                index = -1;
+                currentElement = default;
+            }
+            #endregion
+        }
+        #endregion
     }
 }
